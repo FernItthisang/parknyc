@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>The Accessibility of Park in Manhattan</title>
+  <link href='https://api.mapbox.com/mapbox-gl-js/v2.9.1/mapbox-gl.css' rel='stylesheet' />
+  <script src='https://api.mapbox.com/mapbox-gl-js/v2.9.1/mapbox-gl.js'></script>
+  <script src='https://cdnjs.cloudflare.com/ajax/libs/Turf.js/6.5.0/turf.min.js'></script>
+  <link href="https://fonts.googleapis.com/css2?family=Jersey+20&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style/style.css">
+</head>
+<body>
+  <div id="text">
+    <h3>The Analysis of Accessibility of Park in Manhattan</h3>
+  </div>
+  <div id="map" style="width: 100%; height: 100vh;"></div>
+  <div id="controls">
+    <button onclick="set2DView()">2D View</button>
+    <button onclick="set3DView()">3D View</button>
+    <button id="togglePinsButton" onclick="togglePins()">Hide Pins</button>
+  </div>
+  <div id="park-info"></div>
+
+  <script>
+    mapboxgl.accessToken = 'pk.eyJ1IjoiZmVybjI1Ny0iLCJhIjoiY2x2bzRjNml2MGt1MDJtcG4xNTdncnR6dSJ9.K6Vr79F6R1Yco84U-NpzUQ'; // replace with your Mapbox access token
+    const initialCenter = [-73.968728, 40.778984]; // initial center
+    const initialZoom = 11; // initial zoom
+
+    const map = new mapboxgl.Map({
+      container: 'map', // container ID
+      style: 'mapbox://styles/fern257-/clzlplot2004601qsg1jb8i3f', // style URL
+      center: initialCenter, // starting position [lng, lat]
+      zoom: initialZoom, // starting zoom
+    });
+
+    let markers = []; // Array to store marker objects
+    let pinsVisible = true; // To track the visibility of pins
+
+    function togglePins() {
+      if (pinsVisible) {
+        markers.forEach(marker => marker.remove()); // Remove all markers
+        document.getElementById('togglePinsButton').innerText = 'Show Pins';
+      } else {
+        markers.forEach(marker => marker.addTo(map)); // Add markers back to the map
+        document.getElementById('togglePinsButton').innerText = 'Hide Pins';
+      }
+      pinsVisible = !pinsVisible; // Toggle visibility state
+    }
+
+    // Add the layer of 3D residential buildings
+    map.on('load', function() {
+      // Add the GeoJSON data as a source
+      fetch('data/MapPLUTO.geojson')
+        .then(response => response.json())
+        .then(data => {
+          console.log('GeoJSON data loaded:', data); // Debugging
+          map.addSource('building-footprints', {
+            type: 'geojson',
+            data: data
+          });
+
+          // Add a layer to visualize the 3D buildings
+          map.addLayer({
+            'id': '3d-buildings',
+            'type': 'fill-extrusion',
+            'source': 'building-footprints',
+            'paint': {
+              'fill-extrusion-color': '#888',
+              'fill-extrusion-height': ['get', 'NumFloors'],
+              'fill-extrusion-base': 0,
+              'fill-extrusion-opacity': 0.6
+            }
+          });
+
+          // Add source and layer for Sun Analysis zones
+          const zones = [
+            { id: 'zone1', url: 'mapbox://fern257-.2616mkha', sourceLayer: 'MN01_daylight_analysis-7f5403' },
+            { id: 'zone2', url: 'mapbox://fern257-.0zsor6uy', sourceLayer: 'MN02_daylight_analysis-2k31d8' },
+            { id: 'zone3', url: 'mapbox://fern257-.do3dfgpa', sourceLayer: 'MN03_daylight_analysis-7jwksh' },
+            { id: 'zone4', url: 'mapbox://fern257-.dx552ugp', sourceLayer: 'MN04_daylight_analysis-6l8gkz' },
+            { id: 'zone5', url: 'mapbox://fern257-.4cv85zrl', sourceLayer: 'MN05_daylight_analysis-anac6m' },
+            { id: 'zone6', url: 'mapbox://fern257-.1w4elb6n', sourceLayer: 'MN06_daylight_analysis-186nsh' },
+            { id: 'zone7', url: 'mapbox://fern257-.dp0d6ru7', sourceLayer: 'MN07_daylight_analysis1-60r9sv' },
+            { id: 'zone8', url: 'mapbox://fern257-.9dqpu9ru', sourceLayer: 'MN08_daylight_analysis-8zetef' },
+            { id: 'zone9', url: 'mapbox://fern257-.3i05a5tb', sourceLayer: 'MN09_daylight_analysis-d9xgxr' },
+            { id: 'zone10', url: 'mapbox://fern257-.c3oroaf7', sourceLayer:'MN10_daylight_analysis-5s9fnj' },
+            { id: 'zone11', url: 'mapbox://fern257-.5bbhsb0u', sourceLayer:'MN11_daylight_analysis-c0pv7r' },
+            { id: 'zone12', url: 'mapbox://fern257-.3qbfha3x', sourceLayer:'MN12_daylight_analysis-2fkac2' }
+          ];
+
+          zones.forEach(zone => {
+            map.addSource(zone.id, {
+              type: 'vector',
+              url: zone.url
+            });
+
+            map.addLayer({
+              id: `${zone.id}-layer`,
+              type: 'fill',
+              source: zone.id,
+              'source-layer': zone.sourceLayer,
+              paint: {
+                'fill-color': [
+                  'interpolate',
+                  ['linear'],
+                  ['get', 'Avg_Daylight_Hours'], // Replace with the actual property name
+                  0, '#007000',
+                  5, '#FFBF00',
+                  10, '#D2222D',
+                ],
+                'fill-opacity': 0.6
+              }
+            });
+          });
+
+          // Add a source and layer for Manhattan boundary
+          fetch('https://raw.githubusercontent.com/dwillis/nyc-maps/master/boroughs.geojson')
+            .then(response => response.json())
+            .then(manhattanBoundary => {
+              map.addSource('manhattan-boundary', {
+                type: 'geojson',
+                data: manhattanBoundary
+              });
+
+              map.addLayer({
+                id: 'manhattan-boundary-layer',
+                type: 'line',
+                source: 'manhattan-boundary',
+                paint: {
+                  'line-color': '#3d6ed1',
+                  'line-width': 3
+                },
+                filter: ['==', 'BoroName', 'Manhattan']
+              });
+
+              // Add park markers
+              fetch('data/parks.geojson')
+                .then(response => response.json())
+                .then(parks => {
+                  parks.features.forEach(function(park) {
+                    if (park.properties.borough === 'M') { // Assuming 'M' stands for Manhattan
+                      const centroid = turf.centroid(park);
+                      const coordinates = centroid.geometry.coordinates;
+                      const parkSize = park.properties.acres; // Get park size from properties
+
+                      const el = document.createElement('div');
+                      el.className = 'marker';
+                      el.style.backgroundImage = 'url(asset/pin-01.png)';
+                      el.style.width = '20px';
+                      el.style.height = '20px';
+
+                      const marker = new mapboxgl.Marker(el)
+                        .setLngLat(coordinates)
+                        .setPopup(new mapboxgl.Popup({ offset: 25 }) // add popups
+                          .setHTML(`<p>${park.properties.signname}</p>`));
+
+                      marker.addTo(map);
+                      markers.push(marker); // Store marker in the array
+
+                      el.addEventListener('click', function() {
+                        generateIsochrone(coordinates, park.properties.signname, parkSize);
+                      });
+                    }
+                  });
+                })
+                .catch(error => console.error('Error loading parks data:', error));
+            })
+            .catch(error => console.error('Error loading Manhattan boundary data:', error));
+        })
+        .catch(error => console.error('Error loading GeoJSON data:', error));
+    });
+
+    function set2DView() {
+      map.easeTo({
+        pitch: 0,
+        bearing: 0,
+        duration: 1000 // animation duration in milliseconds
+      });
+    }
+
+    function set3DView() {
+      map.easeTo({
+        pitch: 60,
+        bearing: -17.6,
+        duration: 1000 // animation duration in milliseconds
+      });
+    }
+
+    function zoomToZone() {
+      const zone = document.getElementById('zoneSelect').value;
+      if (zone === 'all') {
+        map.easeTo({
+          center: initialCenter,
+          zoom: initialZoom,
+          pitch: 0,
+          bearing: 0,
+          duration: 1000 // animation duration in milliseconds
+        });
+      } else if (zoneBounds[zone]) {
+        map.fitBounds(zoneBounds[zone], {
+          padding: { top: 10, bottom: 25, left: 15, right: 5 }
+        });
+      }
+    }
+
+    function generateIsochrone(coordinates, parkName, parkSize) {
+      const lon = coordinates[0];
+      const lat = coordinates[1];
+      const profile = 'walking'; // can be 'walking', 'cycling', or 'driving'
+      const minutes = 10; // travel time in minutes
+
+      const url = `https://api.mapbox.com/isochrone/v1/mapbox/${profile}/${lon},${lat}?contours_minutes=${minutes}&polygons=true&access_token=${mapboxgl.accessToken}`;
+
+      fetch(url)
+        .then(response => response.json())
+        .then(data => {
+          if (map.getSource('isochrone')) {
+            map.getSource('isochrone').setData(data);
+          } else {
+            map.addSource('isochrone', {
+              type: 'geojson',
+              data: data
+            });
+
+            map.addLayer({
+              id: 'isochrone-layer',
+              type: 'fill',
+              source: 'isochrone',
+              paint: {
+                'fill-color': '#a7bde9',
+                'fill-opacity': 0.5
+              }
+            });
+          }
+
+          // Update park information including park size
+          document.getElementById('park-info').innerHTML = `
+            <h4>${parkName}</h4>
+            <p>Park Size: ${parkSize} acres</p>`;
+        })
+        .catch(error => console.error('Error generating isochrone:', error));
+    }
+  </script>
+</body>
+</html>
